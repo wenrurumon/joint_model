@@ -11,6 +11,5 @@ rawi <- cbind(Y,X)
 raw <- lapply(1:3,function(i){
   set.seed(i)
   rawi <- rawi + rnorm(length(rawi),0,0.3)
-  rawi
+  list(Y=scale(rawi)[,1:4,drop=F],X=scale(rawi)[,-1:-4,drop=F])
 })
-
