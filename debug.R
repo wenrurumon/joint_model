@@ -3,23 +3,22 @@ rm(list=ls())
 library(corpcor)
 library(flare)
 
-rho <- 2
-lambda <- rho/10
-
 ############################
 # Macro
 ############################
 
-lasso <- function(Y,X,lambda){
+lasso <- function(Y,X=NULL,lambda=0.3){
+  if(is.list(Y)){
+    Y <- do.call(cbind,Y)
+  }
+  if(is.null(X)){
+    X <- Y[,-1]
+    Y <- Y[,1,drop=F]
+  }
   slimi <- flare::slim(X=X,Y=Y,lambda=lambda,rho=1,method='lasso',verbose=FALSE)
   Xsel <- (slimi$beta!=0)
   X <- X[,Xsel,drop=F]
-  list(Xsel=Xsel,lm=lm(Y~X))
-}
-lassot <- function(Y,X,lambda,i=1){
-  X <- cbind(Y[,-i],X)
-  Y <- Y[,i,drop=F]
-  lasso(Y,X,lambda)
+  list(Xsel=Xsel,lm=lm(Y~X-1))
 }
 
 qpca <- function(A,lambda=0){
@@ -48,123 +47,93 @@ ginv<-function(A){
 }
 
 pn <- function(x,p=2){
-  (sum(abs(x)^p))^(1/p)
+  (sum((x)^p))^(1/p)
 }
 
 positive <- function(x){
   x * (x>0)
 }
 
-apply_random <- function(x,s=1){
-  out <- x + rnorm(x,0,s)
-  scale(out)[,]
+dummy <- function(x,error=1){
+  e <- rnorm(length(x),0,error*sd(x))
+  x + e
+}
+
+#calculation
+
+calc_d <- function(Wli,Xl,Yli,rho=0,Z=0,U=0){
+  ginv(t(Wli)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%Wli+rho*diag(ncol(Wli))) %*%
+    (t(Wli)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%Yli+rho*(Z-U))
 }
 
 ############################
 # Sample data
 ############################
 
-#Iris data YX
+Y <- scale(matrix(rnorm(500),100,5,dimnames=list(NULL,paste0('y',1:5))))
+X <- scale(matrix(rnorm(300),100,3,dimnames=list(NULL,paste0('x',1:3))))
+Y[,1] <- Y[,3] + Y[,5] + X[,1]
+Y[,2] <- Y[,3] + Y[,4] + X[,2]
+Y <- scale(Y)
+X <- scale(X)
 
-Y <- scale(data.matrix(iris[,1:4]))
-colnames(Y) <- paste0('y',1:4)
-Y <- cbind(Y,y5 = runif(nrow(Y)),y6=runif(nrow(Y)))
-
-X <- scale(qpca(sapply(1:4,function(i){lm(Y[,i]~Y[,-i])$residual}),lambda=.2)$X)
-colnames(X) <- paste0('x',1:ncol(X))
-X <- cbind(X,x4=runif(nrow(X)), x5=runif(nrow(X)), x6=runif(nrow(X)))
-
-#Ramdom data YX
-
-# Y <- cbind(y1=runif(100,10,20))
-# Y <- scale(cbind(Y,y2=Y[,1]*20+24+runif(100,-2,2)))
-# X <- scale(matrix(rnorm(300),100,3,dimnames=list(NULL,c('x1','x2','x3'))))
-
-raw <- lapply(1:3,function(i){
-  set.seed(i)
-  Y <- apply_random(Y,0.1)
-  X <- apply_random(X,1)
-  list(Y=Y,X=X)
+raw <- lapply(1:3,function(l){
+  list(Y=dummy(Y,0),X=dummy(X,0))
 })
 
-############################
-# Initialization and Interation 1
-############################
+#############################
+# Config
+#############################
 
-#Global Config
-YX <- raw
-# rho <- 1
-# lambda <- rho/20
-L <- length(YX)
-J <- ncol(raw[[1]]$Y)
+l <- 1
+i <- 1
+rho <- 1
+l1 <- 0.1
+l2 <- 0.4
+
+#init
+
+L <- length(raw)
+M <- ncol(raw[[1]]$Y)
 K <- ncol(raw[[1]]$X)
 
-#for i
-i <- 1
-
-#init: DELTAi(0), Zi(0), U0
-D0 <- sapply(1:L,function(l){
-  Yl <- YX[[l]]$Y
-  Xl <- YX[[l]]$X
-  Wi <- cbind(int=1,Yl[,-i,drop=F],Xl)
-  yi <- Yl[,i,drop=F]
-  u0 <- 0
-  # di0 <- (ginv(t(Wi)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%Wi + rho * diag(ncol(Wi)))%*%
-            # t(Wi)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%yi)
-  di0 <- (ginv(t(Wi)%*%Wi%*%ginv(t(Wi)%*%Wi)%*%t(Wi)%*%Wi + rho * diag(ncol(Wi)))%*%
-            t(Wi)%*%Wi%*%ginv(t(Wi)%*%Wi)%*%t(Wi)%*%yi)
-  di0
+d0 <- sapply(1:L,function(l){
+  Yl <- raw[[l]]$Y
+  Xl <- raw[[l]]$X
+  Yli <-Yl[,i,drop=F]
+  Wli <- cbind(Yl[,-i],Xl)
+  calc_d(Wli,Xl,Yli,rho)
 })
-Z0 <- D0
-U0 <- D0-Z0
+z0 <- d0
+u0 <- z0-d0
 
-#interation: DELTAi(m)
-
-D1 <- sapply(1:L,function(l){
-  Yl <- YX[[l]]$Y
-  Xl <- YX[[l]]$X
-  Wi <- cbind(int=1,Yl[,-i,drop=F],Xl)
-  yi <- Yl[,i,drop=F]
-  d1 <- (ginv(t(Wi)%*%Wi%*%ginv(t(Wi)%*%Wi)%*%t(Wi)%*%Wi + rho * diag(ncol(Wi)))%*%
-            t(Wi)%*%Wi%*%ginv(t(Wi)%*%Wi)%*%t(Wi)%*%yi + 
-           rho * (Z0[,l] - U0[,l]))
-  d1
-})
-
-#interation: Z(m)
-
-# Z1 <- positive(1 - lambda/rho * sqrt(L) / sqrt(rowMeans(D0 - U0)^2)) * (D0-U0)
-Z1 <- positive(1-lambda/rho * sqrt(L) / abs(D0-U0)) * (D0-U0)
-U1 <- U0 + D1 - Z1
-# print(paste(pn(D1-D0),pn(Z1-Z0),pn(U1-U0)))
-
-#interation: m+1
+#itn
 itn <- 0
-while(itn<1000){
-  # print(itn)
+itnmax <- 20
+while(TRUE){
   itn <- itn+1
-  D0 <- D1; Z0 <- Z1; U0 <- U1
-  D1 <- sapply(1:L,function(l){
-    Yl <- YX[[l]]$Y
-    Xl <- YX[[l]]$X
-    Wi <- cbind(int=1,Yl[,-i,drop=F],Xl)
-    yi <- Yl[,i,drop=F]
-    d1 <- (ginv(t(Wi)%*%Wi%*%ginv(t(Wi)%*%Wi)%*%t(Wi)%*%Wi + rho * diag(ncol(Wi)))%*%
-             t(Wi)%*%Wi%*%ginv(t(Wi)%*%Wi)%*%t(Wi)%*%yi + 
-             rho * (Z0[,l] - U0[,l]))
+  if(itn>itnmax){break}
+  print(itn)
+  d1 <- sapply(1:L,function(l){
+    Yl <- raw[[l]]$Y
+    Xl <- raw[[l]]$X
+    Yli <-Yl[,i,drop=F]
+    Wli <- cbind(Yl[,-i],Xl)
+    d1 <- calc_d(Wli,Wli,Yli,rho,Z=z0[,l],U=u0[,l])
     d1
   })
-  # Z1 <- positive(1 - lambda/rho * sqrt(L) / sqrt(rowMeans(D0 - U0)^2)) * (D0-U0)
-  Z1 <- positive(1-lambda/rho * sqrt(L) / abs(D0-U0)) * (D0-U0)
-  Z1[is.na(Z1)] <- 0
-  U1 <- U0 + D1 - Z1
-  # print(paste(pn(D1-D0),pn(Z1-Z0),pn(U1-U0)))
+  # print(d1)
+  # print(u0)
+  z1 <- rep(0,nrow(d1))
+  z1[1:(M-1)] <- positive(1 - l1 * sqrt(L)/apply(d1-u0,1,pn))[1:M-1]
+  z1[-1:(1-M)] <- positive(1 - l2 * sqrt(L)/apply(d1-u0,1,pn))[-1:(1-M)]
+  z1 <- ifelse(is.na(z1),0,z1) * (d1-u0)
+  u1 <- u0 + d1 - z1
+  print((z1!=0)+0)
+  print(pn(d1-d0))
+  d0 <- d1; z0 <- z1; u0 <- u1
 }
 
-#output
-((Z1!=0)+0)[-1,,drop=F]
-sapply(raw,function(x){
-  y <- x$Y[,1,drop=F]
-  x <- cbind(x$Y[,-1],x$X)
-  lasso(y,x,lambda=0.08)[[1]]
-}) + 0
+
+
+
