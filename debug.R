@@ -62,8 +62,13 @@ dummy <- function(x,error=1){
 #calculation
 
 calc_d <- function(Wli,Xl,Yli,rho=0,Z=0,U=0){
+  if(sum(abs(Z),abs(U))==0){
+      Z <- 0
+    } else {
+      Z <- Z-U
+    }
   ginv(t(Wli)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%Wli+rho*diag(ncol(Wli))) %*%
-    (t(Wli)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%Yli+rho*(Z-U))
+    (t(Wli)%*%Xl%*%ginv(t(Xl)%*%Xl)%*%t(Xl)%*%Yli+rho*Z)
 }
 
 ############################
@@ -72,7 +77,7 @@ calc_d <- function(Wli,Xl,Yli,rho=0,Z=0,U=0){
 
 Y <- scale(matrix(rnorm(500),100,5,dimnames=list(NULL,paste0('y',1:5))))
 X <- scale(matrix(rnorm(300),100,3,dimnames=list(NULL,paste0('x',1:3))))
-Y[,1] <- Y[,3] + Y[,5] + X[,1]
+Y[,1] <- Y[,4] + Y[,5] + X[,1]
 Y[,2] <- Y[,3] + Y[,4] + X[,2]
 Y <- scale(Y)
 X <- scale(X)
@@ -88,8 +93,8 @@ raw <- lapply(1:3,function(l){
 l <- 1
 i <- 1
 rho <- 1
-l1 <- 0.1
-l2 <- 0.4
+l1 <- 1
+l2 <- 2.5
 
 #init
 
@@ -102,7 +107,7 @@ d0 <- sapply(1:L,function(l){
   Xl <- raw[[l]]$X
   Yli <-Yl[,i,drop=F]
   Wli <- cbind(Yl[,-i],Xl)
-  calc_d(Wli,Xl,Yli,rho)
+  calc_d(Wli,Wli,Yli,rho)
 })
 z0 <- d0
 u0 <- z0-d0
@@ -119,14 +124,15 @@ while(TRUE){
     Xl <- raw[[l]]$X
     Yli <-Yl[,i,drop=F]
     Wli <- cbind(Yl[,-i],Xl)
-    d1 <- calc_d(Wli,Wli,Yli,rho,Z=z0[,l],U=u0[,l])
+    d1 <- calc_d(Wli,Xl,Yli,rho,Z=z0[,l],U=u0[,l])
     d1
   })
-  # print(d1)
-  # print(u0)
+  print(d1)
+  print(u0)
   z1 <- rep(0,nrow(d1))
-  z1[1:(M-1)] <- positive(1 - l1 * sqrt(L)/apply(d1-u0,1,pn))[1:M-1]
-  z1[-1:(1-M)] <- positive(1 - l2 * sqrt(L)/apply(d1-u0,1,pn))[-1:(1-M)]
+  print(apply(d1-u0,1,pn))
+  z1[1:(M-1)] <- positive(1 - l1/apply(d1-u0,1,pn))[1:M-1]
+  z1[-1:(1-M)] <- positive(1 - l2/apply(d1-u0,1,pn))[-1:(1-M)]
   z1 <- ifelse(is.na(z1),0,z1) * (d1-u0)
   u1 <- u0 + d1 - z1
   print((z1!=0)+0)
