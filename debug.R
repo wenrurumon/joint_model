@@ -75,15 +75,17 @@ calc_d <- function(Wli,Xl,Yli,rho=0,Z=0,U=0){
 # Sample data
 ############################
 
-Y <- scale(matrix(rnorm(500),100,5,dimnames=list(NULL,paste0('y',1:5))))
-X <- scale(matrix(rnorm(300),100,3,dimnames=list(NULL,paste0('x',1:3))))
-Y[,1] <- Y[,4] + Y[,5] + X[,1]
+Y <- sapply(1:5,function(x) rnorm(100))
+colnames(Y) <- paste0('y',1:5)
+X <- sapply(1:3,function(x) rnorm(100))
+colnames(X) <- paste0('x',1:3)
+Y[,1] <- Y[,3] + Y[,5] + X[,1]
 Y[,2] <- Y[,3] + Y[,4] + X[,2]
 Y <- scale(Y)
 X <- scale(X)
 
 raw <- lapply(1:3,function(l){
-  list(Y=dummy(Y,0),X=dummy(X,0))
+  list(Y=dummy(Y,0.1),X=dummy(X,0.1))
 })
 
 #############################
@@ -92,9 +94,7 @@ raw <- lapply(1:3,function(l){
 
 l <- 1
 i <- 1
-rho <- 1
-l1 <- 1
-l2 <- 2.5
+rho <- .3
 
 #init
 
@@ -106,40 +106,46 @@ d0 <- sapply(1:L,function(l){
   Yl <- raw[[l]]$Y
   Xl <- raw[[l]]$X
   Yli <-Yl[,i,drop=F]
+  # Yl <- Xl %*% ginv(t(Xl)%*%Xl) %*% t(Xl) %*% Yl
   Wli <- cbind(Yl[,-i],Xl)
-  calc_d(Wli,Wli,Yli,rho)
+  calc_d(Wli,Xl,Yli,rho)
 })
+# z0 <- positive(1-rho*sqrt(L)/apply(d0,1,pn)) * d0
 z0 <- d0
-u0 <- z0-d0
+u0 <- d0 - z0
+print(d0)
+print(z0)
 
 #itn
-itn <- 0
-itnmax <- 20
-while(TRUE){
-  itn <- itn+1
-  if(itn>itnmax){break}
-  print(itn)
-  d1 <- sapply(1:L,function(l){
-    Yl <- raw[[l]]$Y
-    Xl <- raw[[l]]$X
-    Yli <-Yl[,i,drop=F]
-    Wli <- cbind(Yl[,-i],Xl)
-    d1 <- calc_d(Wli,Xl,Yli,rho,Z=z0[,l],U=u0[,l])
-    d1
-  })
-  print(d1)
-  print(u0)
-  z1 <- rep(0,nrow(d1))
-  print(apply(d1-u0,1,pn))
-  z1[1:(M-1)] <- positive(1 - l1/apply(d1-u0,1,pn))[1:M-1]
-  z1[-1:(1-M)] <- positive(1 - l2/apply(d1-u0,1,pn))[-1:(1-M)]
-  z1 <- ifelse(is.na(z1),0,z1) * (d1-u0)
-  u1 <- u0 + d1 - z1
-  print((z1!=0)+0)
-  print(pn(d1-d0))
-  d0 <- d1; z0 <- z1; u0 <- u1
-}
+d1 <- sapply(1:L,function(l){
+  Yl <- raw[[l]]$Y
+  Xl <- raw[[l]]$X
+  Yli <-Yl[,i,drop=F]
+  Wli <- cbind(Yl[,-i],Xl)
+  d1 <- calc_d(Wli,Xl,Yli,rho,Z=z0[,l],U=u0[,l])
+  d1
+})
+z1 <- positive(1-sqrt(L)/rho/apply(d0,1,pn))
+z1 <- ifelse(is.na(z1),0,z1) * (d1-u0)
+u1 <- u0 + d1 - z1
+print((z1!=0)+0)
+print(pn(d1-d0))
 
+#itn+1
+z0 <- z1; d0 <- d1; u0 <- u1
+d1 <- sapply(1:L,function(l){
+  Yl <- raw[[l]]$Y
+  Xl <- raw[[l]]$X
+  Yli <-Yl[,i,drop=F]
+  Wli <- cbind(Yl[,-i],Xl)
+  d1 <- calc_d(Wli,Xl,Yli,rho,Z=z0[,l],U=u0[,l])
+  d1
+})
+z1 <- positive(1-sqrt(L)/rho/apply(d1-u0,1,pn))
+z1 <- ifelse(is.na(z1),0,z1) * (d1-u0)
+u1 <- u0 + d1 - z1
+print((z1!=0)+0)
+print(pn(d1-d0))
 
 
 
