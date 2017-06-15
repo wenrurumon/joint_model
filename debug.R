@@ -61,6 +61,7 @@ calc_d <- function(wi,x,yi,rho=0,Z=0,U=0){
   out
 }
 
+#equali(Yl,Xl,i,NULL,wsel,Z=z0[wsel,l],U=u0[wsel,l])
 equali <- function(Y,X,i,lambda1=0.5,wsel=NULL,Z=0,U=0){
   yi <- Y[,i,drop=F]
   x <- X
@@ -96,15 +97,16 @@ raw <- lapply(1:3,function(l){
 ############################
 # Main
 i <- 1
+itnmax <- 100
 ############################
 
 #config
 L <- length(raw)
 M <- ncol(Y)
-rho <- .5
+rho <- 1
 lambda1 <- .7
-lambda2 <- .01
-a <- 0.5
+lambda2 <- .1
+a <- 0.3
 
 #init0
 d0 <- sapply(1:L,function(l){
@@ -128,17 +130,25 @@ wsel <- rowSums(z1!=0)>0
 u1 <- u0 + d1 - z1
 
 #initm
-pn(d1-d0)
-print(d1)
-rho <- rho * a
-lambda2 <- lambda2 * a
-d0 <- d1; z0 <- z1; u0 <- u1;
-d1 <- sapply(1:L,function(l){
-  Yl <- raw[[l]]$Y
-  Xl <- raw[[l]]$X
-  equali(Yl,Xl,i,NULL,wsel,Z=z0[wsel,l],U=u0[wsel,l])
-})
-z1 <- positive(1-sqrt(L)*lambda2/rho/apply(d1-u0,1,pn)) * (d1-u0)
-z1[is.na(z1)] <- 0
-wsel <- rowSums(z1!=0)>0
-u1 <- u0 + d1 - z1
+itn <- 0
+while(TRUE){
+  itn <- itn+1
+  if(itn>itnmax){break}
+  if(pn(d1-d0)<=1e-8){break}
+  print(itn)
+  print(pn(d1-d0))
+  print(d1)
+  d0 <- d1; z0 <- z1; u0 <- u1
+  rho <- rho * a
+  lambda2 <- lambda2 * a
+  d0 <- d1; z0 <- z1; u0 <- u1;
+  d1 <- sapply(1:L,function(l){
+    Yl <- raw[[l]]$Y
+    Xl <- raw[[l]]$X
+    equali(Yl,Xl,i,NULL,wsel,Z=z0[wsel,l],U=u0[wsel,l])
+  })
+  z1 <- positive(1-sqrt(L)*lambda2/rho/apply(d1-u0,1,pn)) * (d1-u0)
+  z1[is.na(z1)] <- 0
+  wsel <- rowSums(z1!=0)>0
+  u1 <- u0 + d1 - z1
+}
