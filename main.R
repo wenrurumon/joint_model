@@ -73,6 +73,6 @@ maini <- function(raw,i=1,rho=1,lambda1=.7,lambda2=.1,a=.3,itnmax=100){
 
 #full network 
 jointnet <- function(raw,rho=1,lambda1=.7,lambda2=.1,a=.3,itnmax=100){
-  out <- lapply(1:ncol(raw[[1]]$Y),maini,raw=raw)
+  out <- lapply(1:ncol(raw[[1]]$Y),maini,raw=raw,rho=rho,lambda1=lambda1,lambda2=lambda2,a=a,itnmax=itnmax)
   abind(out,along=0)
 }
