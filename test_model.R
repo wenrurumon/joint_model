@@ -83,7 +83,7 @@ rownames(sem_deconv) <- colnames(sem_deconv)
 sum((sem_deconv+t(sem_deconv))>0)/2
 Apool <- abind(As,along=0)
 Apool <- apply(Apool,3,as.vector)
-sem_dcnif <- CNIF(data=Apool,init.adj=sem_cnif,max_parent=3)
+sem_dcnif <- CNIF(data=Apool,init.adj=(sem_deconv!=0),max_parent=3)
 plotnet(sem_dcnif,'directed')
 
 #############################################################
