@@ -1,5 +1,5 @@
 
-rm(list=l())
+rm(list=ls())
 
 library(rvest)
 library(dplyr)
