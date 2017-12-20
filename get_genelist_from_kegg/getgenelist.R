@@ -1,17 +1,11 @@
-
 rm(list=ls())
+
 library(rvest)
 library(dplyr)
 
-url_test <- 'http://www.kegg.jp/dbget-bin/www_bget?hsa05010'
-
 getgenelist <- function(url){
-  if(!grepl('http://www.kegg.jp',url)){url <- paste0('http://www.kegg.jp/',url)}
-  kegg <- read_html(url)
-  kegg <- kegg %>% html_nodes('tr:nth-child(9) .td30 div') %>% html_text()
-  genelist1 <- substr(kegg[1:171*2],1,regexpr(';',kegg[1:171*2])-1)
-
-  kegg <- readLines('http://www.kegg.jp/kegg-bin/show_pathway?map=hsa05010&show_description=show')
+  if(!grepl('http://www.kegg.jp',url)){url <- paste0('http://www.kegg.jp',url)}
+  kegg <- readLines(url)
   kegg <- kegg[(grep('mapdata',kegg)[2]+1):(grep('</map>',kegg)-1)]
   kegg <- kegg[!grepl('onmouseover',kegg)]
   kegg <- substr(kegg,regexpr('title',kegg)+7,nchar(kegg))
@@ -24,4 +18,6 @@ getgenelist <- function(url){
   genelist2 <- unique(genelist2)
 }
 
-test <- getgenelist(url_test) 
+test <- apply(pathmap,1,function(x){
+  getgenelist(x[2])
+})
